@@ -1,4 +1,4 @@
 Flask==3.0.3
-rdkit==2023.9.5
+rdkit
 Werkzeug==3.0.2
 gunicorn==21.2.0
