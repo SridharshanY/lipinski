@@ -4,12 +4,13 @@ import multer from "multer";
 import cors from "cors";
 import FormData from "form-data";
 import fs from "fs";
+import os from "os";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const upload = multer({ dest: "uploads/" });
+const upload = multer({ dest: os.tmpdir() });
 
 const RDKIT_URL = process.env.RDKIT_URL || "http://localhost:5000";
 
