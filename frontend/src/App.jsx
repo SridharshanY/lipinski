@@ -13,13 +13,15 @@ export default function App() {
   const [error, setError] = useState(null);
   
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+  const [retrying, setRetrying] = useState(false);
 
-  // Wake up free-tier services on load
+  // Keep services warm: ping every 10 minutes while page is open
   useEffect(() => {
-    axios.get(`${API_URL}/warmup`).catch(() => {});
+    const warmup = () => axios.get(`${API_URL}/warmup`).catch(() => {});
+    warmup(); // initial ping on load
+    const interval = setInterval(warmup, 10 * 60 * 1000); // every 10 min
+    return () => clearInterval(interval);
   }, []);
-  
-  const [warmupMsg] = useState("Services waking up, first request may be slow…");
 
   const handleCheck = async () => {
     if (!smiles) return;
@@ -31,7 +33,24 @@ export default function App() {
       const res = await axios.post(`${API_URL}/api/check`, { smiles });
       setResult(res.data);
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to analyze SMILES");
+      if (err.response?.status >= 500) {
+        // Auto-retry once after waking the service
+        setRetrying(true);
+        setError("Services woke up, retrying…");
+        await axios.get(`${API_URL}/warmup`).catch(() => {});
+        await new Promise(r => setTimeout(r, 5000));
+        try {
+          const res = await axios.post(`${API_URL}/api/check`, { smiles });
+          setResult(res.data);
+          setError(null);
+        } catch (retryErr) {
+          setError(retryErr.response?.data?.error || "Failed after retry. Please try again.");
+        } finally {
+          setRetrying(false);
+        }
+      } else {
+        setError(err.response?.data?.error || "Failed to analyze SMILES");
+      }
     } finally {
       setLoading(false);
     }
@@ -50,14 +69,34 @@ export default function App() {
     setResult(null);
     setFileResults([]);
     
-    const formData = new FormData();
-    files.forEach(file => formData.append("files", file));
+    const buildForm = () => {
+      const formData = new FormData();
+      files.forEach(file => formData.append("files", file));
+      return formData;
+    };
 
     try {
-      const res = await axios.post(`${API_URL}/api/upload`, formData);
+      const res = await axios.post(`${API_URL}/api/upload`, buildForm());
       setFileResults(res.data);
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to upload file");
+      if (err.response?.status >= 500) {
+        // Auto-retry once after waking the service
+        setRetrying(true);
+        setError("Services woke up, retrying…");
+        await axios.get(`${API_URL}/warmup`).catch(() => {});
+        await new Promise(r => setTimeout(r, 5000));
+        try {
+          const res = await axios.post(`${API_URL}/api/upload`, buildForm());
+          setFileResults(res.data);
+          setError(null);
+        } catch (retryErr) {
+          setError(retryErr.response?.data?.error || "Failed after retry. Please try again.");
+        } finally {
+          setRetrying(false);
+        }
+      } else {
+        setError(err.response?.data?.error || "Failed to upload file");
+      }
     } finally {
       setLoading(false);
     }
@@ -216,7 +255,7 @@ export default function App() {
                 disabled={loading || !smiles}
                 className="w-full py-4 rounded-lg font-bold bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg hover:shadow-cyan-500/40 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all uppercase tracking-wider"
               >
-                {loading ? "Analyzing..." : "Analyze Molecule"}
+                {loading ? (retrying ? "Waking services, retrying…" : "Analyzing...") : "Analyze Molecule"}
               </button>
             </section>
           )}
@@ -243,14 +282,19 @@ export default function App() {
                 disabled={loading || files.length === 0}
                 className="w-full py-4 rounded-lg font-bold bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg hover:shadow-blue-500/40 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all uppercase tracking-wider"
               >
-                {loading ? "Processing File..." : "Analyze File"}
+                {loading ? (retrying ? "Waking services, retrying…" : "Processing File...") : "Analyze File"}
               </button>
             </section>
           )}
         </main>
 
         <section className="w-full transition-all duration-500 ease-in-out">
-          {error && (
+          {retrying && (
+            <div className="max-w-2xl mx-auto glass-panel bg-amber-900/40 border-amber-500/50 p-4 text-center text-amber-200 mb-2">
+              ⏳ Service was asleep — waking it up and retrying automatically…
+            </div>
+          )}
+          {error && !retrying && (
             <div className="max-w-2xl mx-auto glass-panel bg-red-900/40 border-red-500/50 p-6 text-center text-red-200 shadow-[0_0_15px_rgba(239,68,68,0.2)] animate-pulse">
               <span className="font-semibold">{error}</span>
             </div>
