@@ -1,0 +1,36 @@
+services:
+  # 1. Python RDKit Microservice
+  - type: web
+    name: lipinski-rdkit
+    env: python
+    rootDir: rdkit-service
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn app:app"
+
+  # 2. Node Backend
+  - type: web
+    name: lipinski-backend
+    env: node
+    rootDir: backend
+    buildCommand: "npm install"
+    startCommand: "npm start"
+    envVars:
+      - key: RDKIT_URL
+        fromService:
+          type: web
+          name: lipinski-rdkit
+          envVarKey: RENDER_EXTERNAL_URL
+
+  # 3. React Frontend (Vite)
+  - type: web
+    name: lipinski-frontend
+    env: static
+    rootDir: frontend
+    buildCommand: "npm install && npm run build"
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: lipinski-backend
+          envVarKey: RENDER_EXTERNAL_URL
