@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -13,6 +13,13 @@ export default function App() {
   const [error, setError] = useState(null);
   
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+
+  // Wake up free-tier services on load
+  useEffect(() => {
+    axios.get(`${API_URL}/warmup`).catch(() => {});
+  }, []);
+  
+  const [warmupMsg] = useState("Services waking up, first request may be slow…");
 
   const handleCheck = async () => {
     if (!smiles) return;

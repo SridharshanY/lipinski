@@ -10,6 +10,19 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Health check
+app.get("/health", (req, res) => res.json({ status: "ok" }));
+
+// Warmup: ping the rdkit service so it wakes up
+app.get("/warmup", async (req, res) => {
+  try {
+    await axios.get(`${RDKIT_URL}/health`, { timeout: 30000 });
+    res.json({ status: "rdkit awake" });
+  } catch (err) {
+    res.status(503).json({ status: "rdkit sleeping", error: err.message });
+  }
+});
+
 const upload = multer({ dest: os.tmpdir() });
 
 const RDKIT_URL = process.env.RDKIT_URL || "http://localhost:5000";
@@ -19,11 +32,12 @@ app.post("/api/check", async (req, res) => {
   try {
     const response = await axios.post(`${RDKIT_URL}/check`, {
       smiles: req.body.smiles
-    });
+    }, { timeout: 30000 });
     res.json(response.data);
   } catch (err) {
-    console.error("RDKit Check Error:", err?.message);
-    res.status(500).json({ error: "RDKit AI Service failed" });
+    const detail = err.response?.data || err.message;
+    console.error("RDKit Check Error:", detail);
+    res.status(500).json({ error: "RDKit service failed", detail });
   }
 });
 
@@ -42,7 +56,7 @@ app.post("/api/upload", upload.array("files"), async (req, res) => {
     const response = await axios.post(
       `${RDKIT_URL}/upload`,
       formData,
-      { headers: formData.getHeaders() }
+      { headers: formData.getHeaders(), timeout: 60000 }
     );
 
     // Clean up temp files
@@ -54,8 +68,8 @@ app.post("/api/upload", upload.array("files"), async (req, res) => {
 
     res.json(response.data);
   } catch (err) {
-    console.error("Upload Error:", err?.message);
-    // Cleanup if possible
+    const detail = err.response?.data || err.message;
+    console.error("Upload Error:", detail);
     if (req.files) {
       for (const file of req.files) {
         if (file.path && fs.existsSync(file.path)) {
@@ -63,7 +77,7 @@ app.post("/api/upload", upload.array("files"), async (req, res) => {
         }
       }
     }
-    res.status(500).json({ error: "Upload failed" });
+    res.status(500).json({ error: "Upload failed", detail });
   }
 });
 
