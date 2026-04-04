@@ -31,7 +31,7 @@ export default function App() {
       const elapsed = Math.round((Date.now() - start) / 1000);
       setWarmupCountdown(maxSeconds - elapsed);
       try {
-        const res = await axios.get(`${API_URL}/warmup`, { timeout: 55000 });
+        const res = await axios.get(`${API_URL}/warmup`, { timeout: 5000 });
         if (res.status === 200) {
           setWarmupCountdown(0);
           return true; // RDKit is awake

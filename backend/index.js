@@ -10,22 +10,37 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Health check
+const RDKIT_URL = process.env.RDKIT_URL || "http://localhost:5000";
+
+// Track RDKit liveness without blocking requests
+const rdkit = { alive: false, checking: false };
+
+const pingRdkit = () => {
+  if (rdkit.checking) return; // already in flight
+  rdkit.checking = true;
+  axios.get(`${RDKIT_URL}/health`, { timeout: 60000 })
+    .then(() => { rdkit.alive = true; })
+    .catch(() => { rdkit.alive = false; })
+    .finally(() => { rdkit.checking = false; });
+};
+
+// Health check for this Node server itself
 app.get("/health", (req, res) => res.json({ status: "ok" }));
 
-// Warmup: ping the rdkit service so it wakes up
-app.get("/warmup", async (req, res) => {
-  try {
-    await axios.get(`${RDKIT_URL}/health`, { timeout: 50000 });
-    res.json({ status: "rdkit awake" });
-  } catch (err) {
-    res.status(503).json({ status: "rdkit sleeping", error: err.message });
+// Non-blocking warmup: returns instantly, fires background ping
+app.get("/warmup", (req, res) => {
+  pingRdkit(); // fire and forget
+  if (rdkit.alive) {
+    res.json({ status: "ok", rdkit: "alive" });
+  } else {
+    res.status(503).json({ status: rdkit.checking ? "waking" : "sleeping", rdkit: "offline" });
   }
 });
 
-const upload = multer({ dest: os.tmpdir() });
+// Keep pinging RDKit every 30s while Node is alive, so it stays warm
+setInterval(pingRdkit, 30 * 1000);
 
-const RDKIT_URL = process.env.RDKIT_URL || "http://localhost:5000";
+const upload = multer({ dest: os.tmpdir() });
 
 // SMILES route
 app.post("/api/check", async (req, res) => {
@@ -37,6 +52,7 @@ app.post("/api/check", async (req, res) => {
   } catch (err) {
     const detail = err.response?.data || err.message;
     console.error("RDKit Check Error:", detail);
+    rdkit.alive = false; // mark offline so next warmup poll re-checks
     res.status(500).json({ error: "RDKit service failed", detail });
   }
 });
@@ -70,6 +86,7 @@ app.post("/api/upload", upload.array("files"), async (req, res) => {
   } catch (err) {
     const detail = err.response?.data || err.message;
     console.error("Upload Error:", detail);
+    rdkit.alive = false; // mark offline
     if (req.files) {
       for (const file of req.files) {
         if (file.path && fs.existsSync(file.path)) {
@@ -82,4 +99,7 @@ app.post("/api/upload", upload.array("files"), async (req, res) => {
 });
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`Node gateway running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Node gateway running on port ${PORT}`);
+  pingRdkit(); // ping RDKit immediately on startup
+});
