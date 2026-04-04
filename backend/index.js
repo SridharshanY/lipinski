@@ -16,7 +16,7 @@ app.get("/health", (req, res) => res.json({ status: "ok" }));
 // Warmup: ping the rdkit service so it wakes up
 app.get("/warmup", async (req, res) => {
   try {
-    await axios.get(`${RDKIT_URL}/health`, { timeout: 30000 });
+    await axios.get(`${RDKIT_URL}/health`, { timeout: 50000 });
     res.json({ status: "rdkit awake" });
   } catch (err) {
     res.status(503).json({ status: "rdkit sleeping", error: err.message });

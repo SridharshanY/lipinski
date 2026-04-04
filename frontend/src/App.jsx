@@ -25,13 +25,13 @@ export default function App() {
   }, []);
 
   // Poll /warmup until RDKit responds OK, up to maxSeconds
-  const waitForWakeup = async (maxSeconds = 75) => {
+  const waitForWakeup = async (maxSeconds = 120) => {
     const start = Date.now();
     while (Date.now() - start < maxSeconds * 1000) {
       const elapsed = Math.round((Date.now() - start) / 1000);
       setWarmupCountdown(maxSeconds - elapsed);
       try {
-        const res = await axios.get(`${API_URL}/warmup`, { timeout: 10000 });
+        const res = await axios.get(`${API_URL}/warmup`, { timeout: 55000 });
         if (res.status === 200) {
           setWarmupCountdown(0);
           return true; // RDKit is awake
