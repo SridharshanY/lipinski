@@ -14,6 +14,7 @@ export default function App() {
   
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
   const [retrying, setRetrying] = useState(false);
+  const [warmupCountdown, setWarmupCountdown] = useState(0);
 
   // Keep services warm: ping every 10 minutes while page is open
   useEffect(() => {
@@ -22,6 +23,27 @@ export default function App() {
     const interval = setInterval(warmup, 10 * 60 * 1000); // every 10 min
     return () => clearInterval(interval);
   }, []);
+
+  // Poll /warmup until RDKit responds OK, up to maxSeconds
+  const waitForWakeup = async (maxSeconds = 75) => {
+    const start = Date.now();
+    while (Date.now() - start < maxSeconds * 1000) {
+      const elapsed = Math.round((Date.now() - start) / 1000);
+      setWarmupCountdown(maxSeconds - elapsed);
+      try {
+        const res = await axios.get(`${API_URL}/warmup`, { timeout: 10000 });
+        if (res.status === 200) {
+          setWarmupCountdown(0);
+          return true; // RDKit is awake
+        }
+      } catch (_) {
+        // 503 or timeout — still sleeping, keep polling
+      }
+      await new Promise(r => setTimeout(r, 5000));
+    }
+    setWarmupCountdown(0);
+    return false; // timed out
+  };
 
   const handleCheck = async () => {
     if (!smiles) return;
@@ -34,11 +56,14 @@ export default function App() {
       setResult(res.data);
     } catch (err) {
       if (err.response?.status >= 500) {
-        // Auto-retry once after waking the service
         setRetrying(true);
-        setError("Services woke up, retrying…");
-        await axios.get(`${API_URL}/warmup`).catch(() => {});
-        await new Promise(r => setTimeout(r, 5000));
+        const awake = await waitForWakeup();
+        if (!awake) {
+          setError("Service took too long to wake. Please try again in a moment.");
+          setRetrying(false);
+          setLoading(false);
+          return;
+        }
         try {
           const res = await axios.post(`${API_URL}/api/check`, { smiles });
           setResult(res.data);
@@ -80,11 +105,14 @@ export default function App() {
       setFileResults(res.data);
     } catch (err) {
       if (err.response?.status >= 500) {
-        // Auto-retry once after waking the service
         setRetrying(true);
-        setError("Services woke up, retrying…");
-        await axios.get(`${API_URL}/warmup`).catch(() => {});
-        await new Promise(r => setTimeout(r, 5000));
+        const awake = await waitForWakeup();
+        if (!awake) {
+          setError("Service took too long to wake. Please try again in a moment.");
+          setRetrying(false);
+          setLoading(false);
+          return;
+        }
         try {
           const res = await axios.post(`${API_URL}/api/upload`, buildForm());
           setFileResults(res.data);
@@ -291,7 +319,12 @@ export default function App() {
         <section className="w-full transition-all duration-500 ease-in-out">
           {retrying && (
             <div className="max-w-2xl mx-auto glass-panel bg-amber-900/40 border-amber-500/50 p-4 text-center text-amber-200 mb-2">
-              ⏳ Service was asleep — waking it up and retrying automatically…
+              <div className="font-semibold mb-1">⏳ Service is waking up — please wait…</div>
+              {warmupCountdown > 0 && (
+                <div className="text-xs text-amber-400">
+                  Checking again in ~{warmupCountdown}s · This can take up to 60 seconds on first load
+                </div>
+              )}
             </div>
           )}
           {error && !retrying && (
