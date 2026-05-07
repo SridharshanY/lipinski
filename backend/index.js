@@ -35,12 +35,13 @@ app.get("/health", (req, res) => res.json({ status: "ok" }));
 app.get("/warmup", (req, res) => {
   pingRdkit(); // fire and forget
   if (rdkit.alive) {
-    res.json({ status: "ok", rdkit: "alive" });
+    res.json({ status: "ok", rdkit: "alive", ready: true });
   } else {
-    res.status(503).json({
+    res.json({
       status: rdkit.checking ? "waking" : "sleeping",
       rdkit: "offline",
-      target: RDKIT_URL
+      target: RDKIT_URL,
+      ready: false
     });
   }
 });
