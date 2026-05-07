@@ -20,6 +20,14 @@ def lipinski(mol, identifier=None):
     except:
         formula = "Unknown"
 
+    rules = {
+        "MW": Descriptors.MolWt(mol) <= 500,
+        "LogP": Descriptors.MolLogP(mol) <= 5,
+        "HDonors": Descriptors.NumHDonors(mol) <= 5,
+        "HAcceptors": Descriptors.NumHAcceptors(mol) <= 10
+    }
+    violations = sum(1 for ok in rules.values() if not ok)
+
     return {
         "Identifier": identifier if identifier else smiles,
         "Smiles": smiles,
@@ -30,12 +38,8 @@ def lipinski(mol, identifier=None):
         "HAcceptors": Descriptors.NumHAcceptors(mol),
         "TPSA": Descriptors.TPSA(mol),
         "RotatableBonds": Descriptors.NumRotatableBonds(mol),
-        "Pass": (
-            Descriptors.MolWt(mol) <= 500 and
-            Descriptors.MolLogP(mol) <= 5 and
-            Descriptors.NumHDonors(mol) <= 5 and
-            Descriptors.NumHAcceptors(mol) <= 10
-        )
+        "Violations": violations,
+        "Pass": violations <= 3
     }
 
 @app.route("/check", methods=["POST"])
