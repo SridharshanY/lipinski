@@ -25,7 +25,7 @@ export default function App() {
   }, []);
 
   // Poll /warmup until RDKit responds OK, up to maxSeconds
-  const waitForWakeup = async (maxSeconds = 120) => {
+  const waitForWakeup = async (maxSeconds = 240) => {
     const start = Date.now();
     while (Date.now() - start < maxSeconds * 1000) {
       const elapsed = Math.round((Date.now() - start) / 1000);

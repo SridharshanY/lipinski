@@ -10,7 +10,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const RDKIT_URL = process.env.RDKIT_URL || "http://localhost:5000";
+const rdkitHostport = process.env.RDKIT_HOSTPORT;
+const configuredRdkitUrl = process.env.RDKIT_URL;
+const RDKIT_URL = configuredRdkitUrl
+  || (rdkitHostport ? `http://${rdkitHostport}` : null)
+  || "http://localhost:5000";
 
 // Track RDKit liveness without blocking requests
 const rdkit = { alive: false, checking: false };
@@ -33,7 +37,11 @@ app.get("/warmup", (req, res) => {
   if (rdkit.alive) {
     res.json({ status: "ok", rdkit: "alive" });
   } else {
-    res.status(503).json({ status: rdkit.checking ? "waking" : "sleeping", rdkit: "offline" });
+    res.status(503).json({
+      status: rdkit.checking ? "waking" : "sleeping",
+      rdkit: "offline",
+      target: RDKIT_URL
+    });
   }
 });
 
@@ -53,7 +61,8 @@ app.post("/api/check", async (req, res) => {
     const detail = err.response?.data || err.message;
     console.error("RDKit Check Error:", detail);
     rdkit.alive = false; // mark offline so next warmup poll re-checks
-    res.status(500).json({ error: "RDKit service failed", detail });
+    const status = err.response?.status || 500;
+    res.status(status).json({ error: "RDKit service failed", detail });
   }
 });
 
@@ -94,12 +103,14 @@ app.post("/api/upload", upload.array("files"), async (req, res) => {
         }
       }
     }
-    res.status(500).json({ error: "Upload failed", detail });
+    const status = err.response?.status || 500;
+    res.status(status).json({ error: "Upload failed", detail });
   }
 });
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`Node gateway running on port ${PORT}`);
+  console.log(`RDKit target: ${RDKIT_URL}`);
   pingRdkit(); // ping RDKit immediately on startup
 });

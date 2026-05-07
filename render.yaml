@@ -15,11 +15,11 @@ services:
     buildCommand: "npm install"
     startCommand: "npm start"
     envVars:
-      - key: RDKIT_URL
+      - key: RDKIT_HOSTPORT
         fromService:
           type: web
           name: lipinski-rdkit
-          envVarKey: RENDER_EXTERNAL_URL
+          property: hostport
 
   # 3. React Frontend (Vite)
   - type: web
