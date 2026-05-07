@@ -11,9 +11,12 @@ app.use(cors());
 app.use(express.json());
 
 const rdkitHostport = process.env.RDKIT_HOSTPORT;
+const rdkitHost = process.env.RDKIT_HOST;
+const rdkitPort = process.env.RDKIT_PORT;
 const configuredRdkitUrl = process.env.RDKIT_URL;
 const RDKIT_URL = configuredRdkitUrl
   || (rdkitHostport ? `http://${rdkitHostport}` : null)
+  || (rdkitHost && rdkitPort ? `http://${rdkitHost}:${rdkitPort}` : null)
   || "http://localhost:5000";
 
 // Track RDKit liveness without blocking requests
