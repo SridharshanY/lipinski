@@ -96,6 +96,10 @@ app.post("/api/upload", upload.array("files"), async (req, res) => {
     const detail = err.response?.data || err.message;
     console.error("Upload Error:", detail);
     rdkit.alive = false; // mark offline
+    const retryAfter = err.response?.headers?.["retry-after"];
+    if (retryAfter) {
+      res.set("Retry-After", String(retryAfter));
+    }
     if (req.files) {
       for (const file of req.files) {
         if (file.path && fs.existsSync(file.path)) {

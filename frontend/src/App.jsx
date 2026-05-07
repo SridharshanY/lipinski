@@ -45,6 +45,15 @@ export default function App() {
     return false; // timed out
   };
 
+  const waitForRateLimit = async (seconds = 15) => {
+    const safeSeconds = Math.max(1, Math.min(120, Number(seconds) || 15));
+    for (let i = safeSeconds; i > 0; i -= 1) {
+      setWarmupCountdown(i);
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    setWarmupCountdown(0);
+  };
+
   const handleCheck = async () => {
     if (!smiles) return;
     setLoading(true);
@@ -104,6 +113,20 @@ export default function App() {
       const res = await axios.post(`${API_URL}/api/upload`, buildForm());
       setFileResults(res.data);
     } catch (err) {
+      if (err.response?.status === 429) {
+        setRetrying(true);
+        const retryAfter = Number(err.response?.headers?.["retry-after"]) || 20;
+        await waitForRateLimit(retryAfter);
+        try {
+          const res = await axios.post(`${API_URL}/api/upload`, buildForm());
+          setFileResults(res.data);
+          setError(null);
+        } catch (retryErr) {
+          setError(retryErr.response?.data?.error || "Rate limit reached. Please retry shortly.");
+        } finally {
+          setRetrying(false);
+        }
+      } else
       if (err.response?.status >= 500) {
         setRetrying(true);
         const awake = await waitForWakeup();
